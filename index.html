@@ -243,12 +243,11 @@ const zoomSlider = document.getElementById('zoom');
 
 // Zoom and center control
 let zoomLevel = parseFloat(zoomSlider.value);
-  zoomSlider.oninput = () => {
-    zoomLevel = parseFloat(zoomSlider.value);
-     dep.oninput = () => {};
-     tun.oninput = () => {};
-let center = [-0.5, -0.3]; // Initial center for interesting Mandelbrot region
+zoomSlider.oninput = () => {
+  zoomLevel = parseFloat(zoomSlider.value);
+};                                    /* ← closed brace added */
 
+let center = [-0.5, -0.3];            /* center defined OUTSIDE handler */
 // Zoom with mouse wheel
 cvs.addEventListener('wheel', (e) => {
   e.preventDefault();
