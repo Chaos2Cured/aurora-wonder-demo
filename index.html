@@ -1,74 +1,39 @@
 <!DOCTYPE html>
-<!-- Aurora Wonder • Step 1 (enhanced) • 2025-04-24 -->
+<!-- Aurora Wonder Fractal v1.5 • 2025-04-24 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <title>Aurora Wonder Fractal</title>
 <style>
-  html, body {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    background: #000;
-    color: #fff;
-    font: 14px/1 sans-serif;
-  }
-  #gl {
-    width: 100%;
-    height: 100%;
-    display: block;
-  }
-  #ui {
-    position: fixed;
-    top: 10px;
-    left: 10px;
-    z-index: 10;
-    background: #0008;
-    padding: 6px 10px;
-    border-radius: 6px;
-  }
-  label {
-    margin-right: 8px;
-    white-space: nowrap;
-  }
-  select, input[type=range] {
-    vertical-align: middle;
-  }
-  #error {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: red;
-    font-size: 16px;
-    text-align: center;
-    display: none;
-  }
+ html,body{margin:0;height:100%;overflow:hidden;background:#000;color:#fff;font:14px/1 sans-serif}
+ #gl{width:100%;height:100%;display:block}
+ #ui{position:fixed;top:10px;left:10px;z-index:10;background:#0008;padding:6px 10px;border-radius:6px}
+ label{margin-right:8px;white-space:nowrap}
+ select,input[type=range]{vertical-align:middle}
+ button{margin-left:4px}
 </style>
 </head>
 <body>
-  <canvas id="gl"></canvas>
-  <div id="error">WebGL is not supported in your browser. Please use a modern browser like Chrome, Firefox, or Edge.</div>
+<canvas id="gl"></canvas>
 
-  <div id="ui">
-    <label>Constant
-      <select id="const">
-        <option value="1.618">φ (1.618)</option>
-        <option value="2.618">φ² (2.618)</option>
-        <option value="2.914">Aurora (2.914)</option>
-        <option value="0.077">Aurora⁻¹ (0.077)</option>
-      </select>
-    </label>
-    <label>Depth <input id="depth" type="range" min="20" max="120" value="80"></label>
-    <label>Tunnel <input id="tunnel" type="range" min="0" max="1" step="0.01" value="0.3"></label>
-    <label>Zoom <input id="zoom" type="range" min="0.1" max="10" step="0.1" value="1.0"></label>
-    <button id="toggleSound">🔇 Sound</button>
-    <button id="resetView">🔄 Reset</button>
-  </div>
+<div id="ui">
+  <label>Constant
+    <select id="const">
+      <option value="1.618">φ</option>
+      <option value="2.618">φ²</option>
+      <option value="2.914">Aurora</option>
+      <option value="0.077">Aurora⁻¹</option>
+    </select>
+  </label>
+  <label>Depth  <input id="depth"  type="range" min="20" max="120" value="80"></label>
+  <label>Tunnel <input id="tunnel" type="range" min="0"  max="1"  step="0.01" value="0.30"></label>
+  <label>Fog    <input id="fog"    type="range" min="0"  max="3"  step="0.05" value="1.2"></label>
+  <label>Zoom   <input id="zoom"   type="range" min="1"  max="10" step="0.1" value="9"></label>
+  <button id="spinToggle">⏸ Rotate</button>
+  <button id="resetView">⟳ Reset</button>
+  <button id="toggleSound">🔇 Sound</button>
+</div>
 
-<!-- ── fragment shader ── -->
 <script id="frag" type="x-shader/x-fragment">
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
@@ -82,286 +47,122 @@ uniform float u_const;
 uniform float u_depth;
 uniform float u_tunnel;
 uniform float u_zoom;
+uniform float u_fog;
 uniform vec2  u_center;
+uniform float u_spin;
 
-// Hue helper (HSL → RGB)
-vec3 hsl2rgb(float h, float s, float l) {
-  vec3 rgb;
-  float c = (1.0 - abs(2.0 * l - 1.0)) * s;
-  float hPrime = h * 6.0;
-  float x = c * (1.0 - abs(mod(hPrime, 2.0) - 1.0));
-  float m = l - c / 2.0;
+const float BANDS = 12.0;
 
-  if (hPrime < 1.0) {
-    rgb = vec3(c, x, 0.0);
-  } else if (hPrime < 2.0) {
-    rgb = vec3(x, c, 0.0);
-  } else if (hPrime < 3.0) {
-    rgb = vec3(0.0, c, x);
-  } else if (hPrime < 4.0) {
-    rgb = vec3(0.0, x, c);
-  } else if (hPrime < 5.0) {
-    rgb = vec3(x, 0.0, c);
-  } else {
-    rgb = vec3(c, 0.0, x);
-  }
-
-  return rgb + vec3(m, m, m);
+vec3 hsl2rgb(float h,float s,float l){
+  float a=s*min(l,1.-l);
+  float f(float n){float k=mod(n+h*6.,6.);return l-a*max(min(min(k,4.-k),1.),0.);}
+  return vec3(f(0.),f(1./3.),f(2./3.));
 }
 
-void main() {
-  // Normalized coords with zoom and center offset
-  vec2 uv = (gl_FragCoord.xy - 0.5 * u_res) / min(u_res.x, u_res.y);
-  uv *= u_zoom; // Dynamic zoom
-  uv += u_center; // Center offset for interesting region
+void main(){
+  vec2 uv=(gl_FragCoord.xy-0.5*u_res)/min(u_res.x,u_res.y);
+  uv*=u_zoom;
+  uv+=u_center;
 
-  // Tunnel warp
-  float r = length(uv);
-  float ang = atan(uv.y, uv.x) + u_time * 0.2;
-  r = pow(r, 1.0 - u_tunnel);
-  vec2 z = vec2(r * cos(ang), r * sin(ang));
-  vec2 c = z; // Use Mandelbrot set: c is the pixel coordinate
+  float r  = length(uv);
+  float ang= atan(uv.y,uv.x)+u_time*u_spin;
+  r        = pow(max(r,1e-6),1.0-u_tunnel);
+  vec2 z   = vec2(r*cos(ang), r*sin(ang));
+  vec2 c   = z;
 
-  // Fractal iteration (Mandelbrot set)
-  float it = 0.0;
-  float smoothIt = 0.0;
-  z = vec2(0.0, 0.0); // Start at origin for Mandelbrot
-  int maxIter = int(200.0 + (10.0 * log(1.0 / u_zoom))); // Increase iterations with zoom
-  for (int i = 0; i < 500; i++) { // Increase max iterations for detail
-    if (i >= maxIter) break;
-    z = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;
-    float r2 = dot(z, z);
-    if (r2 > 4.0) {
-      smoothIt = float(i) + 1.0 - log(log(r2)) / log(2.0); // Smooth iteration for better coloring
-      break;
-    }
-    it += 1.0;
+  float it=0.0, smoothIt=0.0;
+  z=vec2(0.0);
+  int maxIter=int(200.0+10.0*log(1.0/u_zoom));
+  for(int i=0;i<500;i++){
+    if(i>=maxIter)break;
+    z=vec2(z.x*z.x-z.y*z.y,2.0*z.x*z.y)+c;
+    float r2=dot(z,z);
+    if(r2>4.0){smoothIt=float(i)+1.0-log(log(r2))/log(2.0);break;}
+    it+=1.0;
   }
 
-  // Color influenced by u_const
-  float t = smoothIt / float(maxIter);
-  float hue = mod(t * (1.5 + u_const) + u_time * 0.05, 1.0); // Use u_const to modify hue
-  vec3 col = hsl2rgb(hue, 0.9, 0.5); // Vibrant colors
-  col *= 1.0 - 0.3 * exp(-r * 1.0); // Softer fade with distance
-  gl_FragColor = vec4(col, 1.0);
+  float t  = smoothIt/float(maxIter);
+  t        = floor(t*BANDS)/BANDS;           /* crisp rings */
+  float hue=mod(t*(2.0+u_const)+u_time*0.05,1.0);
+
+  float jungle=fract(log(r+1.0)*3.0);        /* lush distance tint */
+  vec3  col   = mix(hsl2rgb(jungle,0.7,0.4), hsl2rgb(hue,0.9,0.6), 0.6);
+  col        *= exp(-r*u_fog);               /* adjustable fog */
+  gl_FragColor=vec4(col,1.0);
 }
 </script>
 
 <script>
-// ==== JS bootstrap ====
-const cvs = document.getElementById('gl');
-const errorDiv = document.getElementById('error');
-const gl = cvs.getContext('webgl');
-if (!gl) {
-  errorDiv.style.display = 'block';
-  throw new Error('WebGL not supported');
-}
+const cvs=document.getElementById('gl');
+const gl=cvs.getContext('webgl'); if(!gl){alert('WebGL unavailable');throw 'no gl';}
+const sel=constElements('#const,#depth,#tunnel,#fog,#zoom');
+function constElements(q){return [...document.querySelectorAll(q)].reduce((o,e)=>((o[e.id]=e),o),{});}
+function resize(){cvs.width=innerWidth;cvs.height=innerHeight;gl.viewport(0,0,gl.drawingBufferWidth,gl.drawingBufferHeight);}resize();addEventListener('resize',resize);
 
-// Log canvas dimensions
-console.log(`Canvas dimensions: ${cvs.width}x${cvs.height}`);
+function compile(src,t){const s=gl.createShader(t);gl.shaderSource(s,src);gl.compileShader(s);
+ if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw gl.getShaderInfoLog(s);return s;}
+const vs=compile('attribute vec2 p;void main(){gl_Position=vec4(p,0,1);}',gl.VERTEX_SHADER);
+const fs=compile(document.getElementById('frag').textContent,gl.FRAGMENT_SHADER);
+const prog=gl.createProgram();gl.attachShader(prog,vs);gl.attachShader(prog,fs);gl.linkProgram(prog);gl.useProgram(prog);
+const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);
+const loc=gl.getAttribLocation(prog,'p');gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);gl.enableVertexAttribArray(loc);
 
-// Enable blending for smoother visuals
-gl.enable(gl.BLEND);
-gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+/* uniforms */
+const U=(n)=>gl.getUniformLocation(prog,n);
+const u_res=U('u_res'),u_time=U('u_time'),u_const=U('u_const'),u_depth=U('u_depth'),
+      u_tunnel=U('u_tunnel'),u_zoom=U('u_zoom'),u_fog=U('u_fog'),u_center=U('u_center'),u_spin=U('u_spin');
 
-function resize() {
-  cvs.width = window.innerWidth;
-  cvs.height = window.innerHeight;
-  gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-  console.log(`Resized to: ${cvs.width}x${cvs.height}`);
-}
-resize();
-window.addEventListener('resize', resize);
+/* camera */
+const START_Z=1.0, START_C=[-0.5,-0.3];
+let zoomLevel=START_Z, center=[...START_C], spin=0.2;
 
-// Compile shaders
-function compile(src, type) {
-  const s = gl.createShader(type);
-  gl.shaderSource(s, src);
-  gl.compileShader(s);
-  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-    const info = gl.getShaderInfoLog(s);
-    console.error(`Shader compilation failed (${type === gl.VERTEX_SHADER ? 'vertex' : 'fragment'}):`, info);
-    throw new Error(`Shader compilation failed: ${info}`);
-  }
-  return s;
-}
+/* live sliders */
+sel.zoom.oninput = ()=> zoomLevel = 11 - parseFloat(sel.zoom.value);   // inverted slider
+sel.depth.oninput=sel.tunnel.oninput=sel.fog.oninput=()=>{};          // force repaint
 
-// Build program
-const vsSource = `
-  attribute vec2 p;
-  void main() {
-    gl_Position = vec4(p, 0.0, 1.0);
-  }
-`;
-const vs = compile(vsSource, gl.VERTEX_SHADER);
-const fs = compile(document.getElementById('frag').textContent, gl.FRAGMENT_SHADER);
-const prog = gl.createProgram();
-gl.attachShader(prog, vs);
-gl.attachShader(prog, fs);
-gl.linkProgram(prog);
-if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-  const info = gl.getProgramInfoLog(prog);
-  console.error('Program linking failed:', info);
-  throw new Error(`Program linking failed: ${info}`);
-}
-gl.useProgram(prog);
+/* wheel zoom */
+cvs.addEventListener('wheel',e=>{e.preventDefault();const d=e.deltaY>0?1.1:0.9;zoomLevel/=d;zoomLevel=Math.max(0.1,Math.min(10,zoomLevel));sel.zoom.value=11-zoomLevel;});
 
-// Fullscreen triangle
-const vertices = new Float32Array([
-  -1.0, -1.0,  // Bottom-left
-   3.0, -1.0,  // Bottom-right (extends beyond viewport for coverage)
-  -1.0,  3.0   // Top-left (extends beyond viewport for coverage)
-]);
-const buf = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
-console.log('Vertex buffer created and bound');
+/* drag pan */
+let drag=false, last=[0,0];
+cvs.addEventListener('mousedown',e=>{drag=true;last=[e.clientX,e.clientY];});
+addEventListener('mouseup',()=>drag=false);
+cvs.addEventListener('mousemove',e=>{
+ if(!drag)return;
+ const denom=Math.min(gl.drawingBufferWidth,gl.drawingBufferHeight);
+ center[0]-=(e.clientX-last[0])/denom*zoomLevel;
+ center[1]+=(e.clientY-last[1])/denom*zoomLevel;
+ last=[e.clientX,e.clientY];
+});
 
-const loc = gl.getAttribLocation(prog, 'p');
-if (loc < 0) {
-  console.error('Failed to get attribute location for p');
-  throw new Error('Failed to get attribute location for p');
-}
-gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-gl.enableVertexAttribArray(loc);
-console.log('Attribute p enabled at location:', loc);
-
-// Uniforms
-const u_res = gl.getUniformLocation(prog, 'u_res');
-const u_time = gl.getUniformLocation(prog, 'u_time');
-const u_const = gl.getUniformLocation(prog, 'u_const');
-const u_depth = gl.getUniformLocation(prog, 'u_depth');
-const u_tunnel = gl.getUniformLocation(prog, 'u_tunnel');
-const u_zoom = gl.getUniformLocation(prog, 'u_zoom');
-const u_center = gl.getUniformLocation(prog, 'u_center');
-console.log('Uniform locations:', { u_res, u_time, u_const, u_depth, u_tunnel, u_zoom, u_center });
-
-// UI elements
-const sel = document.getElementById('const');
-const dep = document.getElementById('depth');
-const tun = document.getElementById('tunnel');
-const zoomSlider = document.getElementById('zoom');
-
-// Zoom and center control
-let zoomLevel = parseFloat(zoomSlider.value);
-zoomSlider.oninput = () => {
-  zoomLevel = parseFloat(zoomSlider.value);
-};                                    /* ← closed brace added */
-
-  const resetBtn = document.getElementById('resetView');
-
-/* default camera */
-const START_Z   = 1.0;
-const START_C   = [-0.5, -0.3];
-
-let zoomLevel = START_Z;
-zoomSlider.value = START_Z;
-let center = START_C.slice();   // clone
-
-/* live zoom slider */
-zoomSlider.oninput = () => zoomLevel = parseFloat(zoomSlider.value);
-
-/* RESET handler */
-resetBtn.onclick = () => {
-  zoomLevel      = START_Z;
-  zoomSlider.value = START_Z;
-
-  center[0] = START_C[0];
-  center[1] = START_C[1];
-
-  // (optional) snap depth & tunnel, uncomment if desired:
-  // dep.value = 80;
-  // tun.value = 0.3;
+/* rotate toggle */
+document.getElementById('spinToggle').onclick=e=>{
+  spin=spin?0:0.2; e.target.textContent=spin?'⏸ Rotate':'▶︎ Rotate';
 };
 
-let center = [-0.5, -0.3];            /* center defined OUTSIDE handler */
-// Zoom with mouse wheel
-cvs.addEventListener('wheel', (e) => {
-  e.preventDefault();
-  const delta = e.deltaY > 0 ? 1.1 : 0.9; // Zoom out or in
-  zoomLevel /= delta;
-  zoomLevel = Math.max(0.1, Math.min(10.0, zoomLevel)); // Clamp zoom
-  zoomSlider.value = zoomLevel;
-});
-
-// Pan with mouse drag
-let isDragging = false;
-let lastMousePos = [0, 0];
-cvs.addEventListener('mousedown', (e) => {
-  isDragging = true;
-  lastMousePos = [e.clientX, e.clientY];
-});
-cvs.addEventListener('mousemove', (e) => {
-  if (isDragging) {
-    const dx = (e.clientX - lastMousePos[0]) / min(gl.drawingBufferWidth, gl.drawingBufferHeight) * zoomLevel;
-    const dy = (e.clientY - lastMousePos[1]) / min(gl.drawingBufferWidth, gl.drawingBufferHeight) * zoomLevel;
-    center[0] -= dx;
-    center[1] += dy;
-    lastMousePos = [e.clientX, e.clientY];
-  }
-});
-cvs.addEventListener('mouseup', () => {
-  isDragging = false;
-});
-
-// Rendering loop
-let start = performance.now();
-function render() {
-  const t = (performance.now() - start) / 1000;
-  
-  // Log uniform values for debugging
-  const resValue = [gl.drawingBufferWidth, gl.drawingBufferHeight];
-  const constValue = parseFloat(sel.value);
-  const depthValue = parseFloat(dep.value);
-  const tunnelValue = parseFloat(tun.value);
-  console.log(`Frame: t=${t.toFixed(2)}, u_res=${resValue}, u_const=${constValue}, u_depth=${depthValue}, u_tunnel=${tunnelValue}, u_zoom=${zoomLevel}, u_center=${center}`);
-
-  gl.uniform2f(u_res, resValue[0], resValue[1]);
-  gl.uniform1f(u_time, t);
-  gl.uniform1f(u_const, constValue);
-  gl.uniform1f(u_depth, depthValue);
-  gl.uniform1f(u_tunnel, tunnelValue);
-  gl.uniform1f(u_zoom, zoomLevel);
-  gl.uniform2f(u_center, center[0], center[1]);
-
-  gl.clearColor(0.0, 0.0, 0.0, 1.0);
-  gl.clear(gl.COLOR_BUFFER_BIT);
-  gl.drawArrays(gl.TRIANGLES, 0, 3);
-
-  const err = gl.getError();
-  if (err !== gl.NO_ERROR) {
-    console.error('WebGL error after drawArrays:', err);
-  }
-
-  requestAnimationFrame(render);
-}
-render();
-
-// ==== audio ====
-let ctx = null, playing = false;
-document.getElementById('toggleSound').onclick = () => {
-  if (!ctx) {
-    ctx = new AudioContext();
-    if (ctx.state === 'suspended') {
-      ctx.resume().then(() => console.log('AudioContext resumed'));
-    }
-  }
-  if (!playing) {
-    const freqs = [528, 660, 792];
-    freqs.forEach(f => {
-      const o = ctx.createOscillator();
-      o.type = 'sine';
-      o.frequency.value = f;
-      o.connect(ctx.destination);
-      o.start();
-      o.stop(ctx.currentTime + 0.5);
-    });
-    document.getElementById('toggleSound').textContent = '🔊 Sound';
-  } else {
-    document.getElementById('toggleSound').textContent = '🔇 Sound';
-  }
-  playing = !playing;
+/* reset */
+document.getElementById('resetView').onclick=()=>{
+  zoomLevel=START_Z; sel.zoom.value=11-START_Z;
+  center=[...START_C];
 };
+
+/* render loop */
+let t0=performance.now();
+(function loop(){
+  const t=(performance.now()-t0)/1000;
+  gl.uniform2f(u_res,cvs.width,cvs.height);
+  gl.uniform1f(u_time,t); gl.uniform1f(u_const,parseFloat(sel.const.value));
+  gl.uniform1f(u_depth,parseFloat(sel.depth.value)); gl.uniform1f(u_tunnel,parseFloat(sel.tunnel.value));
+  gl.uniform1f(u_zoom,zoomLevel); gl.uniform1f(u_fog,parseFloat(sel.fog.value));
+  gl.uniform2f(u_center,center[0],center[1]); gl.uniform1f(u_spin,spin);
+  gl.drawArrays(gl.TRIANGLES,0,3); requestAnimationFrame(loop);
+})();
+
+/* simple chord */
+let ctx=null,playing=false;
+document.getElementById('toggleSound').onclick=()=>{if(!ctx){ctx=new AudioContext();}if(!playing){[528,660,792].forEach(f=>{const o=ctx.createOscillator();o.type='sine';o.frequency.value=f;o.connect(ctx.destination);o.start();o.stop(ctx.currentTime+0.5);});}
+playing=!playing;};
 </script>
 </body>
 </html>
