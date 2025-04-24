@@ -1,35 +1,31 @@
 <!DOCTYPE html>
-<!-- Aurora Wonder • v1.1 • 2025-04-24 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Aurora Wonder Fractal</title>
+<title>Aurora Wonder • debug build</title>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#000;color:#fff;font:14px/1 sans-serif}
-  #gl{width:100%;height:100%;display:block}
-  #ui{position:fixed;top:10px;left:10px;z-index:10;background:#0008;padding:6px 10px;border-radius:6px}
-  label{margin-right:8px;white-space:nowrap}
-  select,input[type=range]{vertical-align:middle}
+ html,body{margin:0;height:100%;overflow:hidden;background:#000;color:#fff;font:14px/1 sans-serif}
+ #gl{width:100%;height:100%;display:block}
+ #ui{position:fixed;top:10px;left:10px;z-index:10;background:#0008;padding:6px 10px;border-radius:6px}
+ label{margin-right:8px;white-space:nowrap}
+ select,input[type=range]{vertical-align:middle}
 </style>
 </head>
 <body>
-  <canvas id="gl"></canvas>
+<canvas id="gl"></canvas>
+<div id="ui">
+  <label>Constant
+    <select id="const">
+      <option value="1.618">φ</option>
+      <option value="2.618">φ²</option>
+      <option value="2.914">Aurora</option>
+      <option value="0.077">Aurora⁻¹</option>
+    </select>
+  </label>
+  <label>Depth  <input id="depth"  type="range" min="20" max="120" value="80"></label>
+  <label>Tunnel <input id="tunnel" type="range" min="0"  max="1"  step="0.01" value="0.7"></label>
+</div>
 
-  <div id="ui">
-    <label>Constant
-      <select id="const">
-        <option value="1.618">φ (1.618)</option>
-        <option value="2.618">φ² (2.618)</option>
-        <option value="2.914">Aurora (2.914)</option>
-        <option value="0.077">Aurora⁻¹ (0.077)</option>
-      </select>
-    </label>
-    <label>Depth  <input id="depth"  type="range" min="20"  max="120" value="80"></label>
-    <label>Tunnel <input id="tunnel" type="range" min="0"   max="1"   step="0.01" value="0.7"></label>
-    <button id="toggleSound">🔇 Sound</button>
-  </div>
-
-<!-- ── fragment shader ── -->
 <script id="frag" type="x-shader/x-fragment">
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
@@ -43,8 +39,8 @@ uniform float u_const;
 uniform float u_depth;
 uniform float u_tunnel;
 
-const float BANDS = 12.0;   // number of color rings
-const float FOG   = 1.2;    // lower = brighter outer arms
+const float BANDS = 12.0;
+const float FOG   = 1.2;
 
 vec3 hsl2rgb(float h,float s,float l){
   float a=s*min(l,1.-l);
@@ -53,104 +49,78 @@ vec3 hsl2rgb(float h,float s,float l){
 }
 
 void main(){
-  /* 1. normalised coords */
   vec2 uv=(gl_FragCoord.xy-0.5*u_res)/min(u_res.x,u_res.y);
 
-  /* 2. tunnel warp */
   float r  = length(uv);
   float ang= atan(uv.y,uv.x) + u_time*0.2;
-  r        = pow(r,1.0-u_tunnel);
+  r        = pow(max(r,1e-6),1.0-u_tunnel);   // avoid r=0^neg
   vec2 z   = vec2(r*cos(ang), r*sin(ang));
 
-  /* 3. fractal iteration */
   float it = 0.0;
   for(int i=0;i<200;i++){
     if(float(i)>=u_depth) break;
-    z = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + vec2(u_const - 2.0, 0.0);
-    if(dot(z,z) > 4.0) break;
+    z = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + vec2(u_const-2.0,0.0);
+    if(dot(z,z)>4.0) break;
     it += 1.0;
   }
 
-  /* 4. color */
-  float t = floor(it / u_depth * BANDS) / BANDS;   // crisp rings
+  float t = floor(it / max(u_depth,1.0) * BANDS) / BANDS;
   vec3 col= hsl2rgb(mod(t+u_time*0.05,1.0), 0.8, 0.5);
-  col    *= exp(-r*FOG);                           // softer fog
-  gl_FragColor = vec4(col, 1.0);
+  col *= exp(-r*FOG);
+  gl_FragColor = vec4(col,1.0);
 }
 </script>
 
 <script>
-/* ==== WebGL bootstrap ==== */
 const cvs=document.getElementById('gl');
 const gl=cvs.getContext('webgl');
-if(!gl){alert('WebGL unavailable');throw 'no WebGL';}
+if(!gl){alert('WebGL unavailable');throw 'no gl';}
 
-function resize(){
-  cvs.width = innerWidth;
-  cvs.height= innerHeight;
-  gl.viewport(0,0,gl.drawingBufferWidth,gl.drawingBufferHeight);
-}
-resize(); addEventListener('resize',resize);
+function resize(){cvs.width=innerWidth;cvs.height=innerHeight;gl.viewport(0,0,gl.drawingBufferWidth,gl.drawingBufferHeight);}
+resize();addEventListener('resize',resize);
 
-/* shader compile/link */
 function compile(src,t){
-  const s=gl.createShader(t); gl.shaderSource(s,src); gl.compileShader(s);
-  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(s);
+  const s=gl.createShader(t);
+  gl.shaderSource(s,src);
+  gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){
+    console.error('Shader error:',gl.getShaderInfoLog(s));
+    throw 'shader fail';
+  }
   return s;
 }
 const vs=compile('attribute vec2 p;void main(){gl_Position=vec4(p,0,1);}',gl.VERTEX_SHADER);
 const fs=compile(document.getElementById('frag').textContent,gl.FRAGMENT_SHADER);
-const prog=gl.createProgram(); gl.attachShader(prog,vs); gl.attachShader(prog,fs);
-gl.linkProgram(prog); gl.useProgram(prog);
+const prog=gl.createProgram(); gl.attachShader(prog,vs); gl.attachShader(prog,fs); gl.linkProgram(prog);
+if(!gl.getProgramParameter(prog,gl.LINK_STATUS)){console.error('Link error:',gl.getProgramInfoLog(prog));throw 'link fail';}
+gl.useProgram(prog);
 
-/* fullscreen triangle */
-const buf=gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER,buf);
-gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1, 3,-1, -1,3]),gl.STATIC_DRAW);
+const buf=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);
 const loc=gl.getAttribLocation(prog,'p');
-gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
-gl.enableVertexAttribArray(loc);
+gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0); gl.enableVertexAttribArray(loc);
 
-/* uniforms */
 const u_res   = gl.getUniformLocation(prog,'u_res');
 const u_time  = gl.getUniformLocation(prog,'u_time');
 const u_const = gl.getUniformLocation(prog,'u_const');
 const u_depth = gl.getUniformLocation(prog,'u_depth');
 const u_tunnel= gl.getUniformLocation(prog,'u_tunnel');
 
-/* UI handles */
-const sel = document.getElementById('const');
-const dep = document.getElementById('depth');
-const tun = document.getElementById('tunnel');
+const sel=document.getElementById('const');
+const dep=document.getElementById('depth');
+const tun=document.getElementById('tunnel');
 
-/* render loop */
-let start = performance.now();
-function loop(){
-  const t = (performance.now()-start)/1000;
+let start=performance.now();
+(function loop(){
+  const t=(performance.now()-start)/1000;
   gl.uniform2f(u_res,cvs.width,cvs.height);
   gl.uniform1f(u_time,t);
-  gl.uniform1f(u_const, parseFloat(sel.value));
-  gl.uniform1f(u_depth, parseFloat(dep.value));
+  gl.uniform1f(u_const,parseFloat(sel.value));
+  gl.uniform1f(u_depth,parseFloat(dep.value));
   gl.uniform1f(u_tunnel,parseFloat(tun.value));
   gl.drawArrays(gl.TRIANGLES,0,3);
   requestAnimationFrame(loop);
-}
-loop();
-
-/* simple 528-Hz chord toggle */
-let ctx=null,playing=false;
-document.getElementById('toggleSound').onclick=()=>{
-  if(!ctx){ ctx=new AudioContext(); if(ctx.state==='suspended') ctx.resume(); }
-  if(!playing){
-    [528,660,792].forEach(f=>{
-      const o=ctx.createOscillator();
-      o.type='sine'; o.frequency.value=f;
-      o.connect(ctx.destination);
-      o.start(); o.stop(ctx.currentTime+0.5);
-    });
-  }
-  playing=!playing;
-};
+})();
 </script>
 </body>
 </html>
