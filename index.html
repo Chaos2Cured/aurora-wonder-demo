@@ -65,6 +65,7 @@
     <label>Tunnel <input id="tunnel" type="range" min="0" max="1" step="0.01" value="0.3"></label>
     <label>Zoom <input id="zoom" type="range" min="0.1" max="10" step="0.1" value="1.0"></label>
     <button id="toggleSound">🔇 Sound</button>
+    <button id="resetView">🔄 Reset</button>
   </div>
 
 <!-- ── fragment shader ── -->
@@ -246,6 +247,32 @@ let zoomLevel = parseFloat(zoomSlider.value);
 zoomSlider.oninput = () => {
   zoomLevel = parseFloat(zoomSlider.value);
 };                                    /* ← closed brace added */
+
+  const resetBtn = document.getElementById('resetView');
+
+/* default camera */
+const START_Z   = 1.0;
+const START_C   = [-0.5, -0.3];
+
+let zoomLevel = START_Z;
+zoomSlider.value = START_Z;
+let center = START_C.slice();   // clone
+
+/* live zoom slider */
+zoomSlider.oninput = () => zoomLevel = parseFloat(zoomSlider.value);
+
+/* RESET handler */
+resetBtn.onclick = () => {
+  zoomLevel      = START_Z;
+  zoomSlider.value = START_Z;
+
+  center[0] = START_C[0];
+  center[1] = START_C[1];
+
+  // (optional) snap depth & tunnel, uncomment if desired:
+  // dep.value = 80;
+  // tun.value = 0.3;
+};
 
 let center = [-0.5, -0.3];            /* center defined OUTSIDE handler */
 // Zoom with mouse wheel
