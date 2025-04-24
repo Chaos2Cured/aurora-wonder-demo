@@ -249,7 +249,7 @@ let center = [-0.5, 0.0]; // Initial center for interesting Mandelbrot region
 cvs.addEventListener('wheel', (e) => {
   e.preventDefault();
   const delta = e.deltaY > 0 ? 1.1 : 0.9; // Zoom out or in
-  zoomLevel *= delta;
+  zoomLevel /= delta;
   zoomLevel = Math.max(0.1, Math.min(10.0, zoomLevel)); // Clamp zoom
   zoomSlider.value = zoomLevel;
 });
