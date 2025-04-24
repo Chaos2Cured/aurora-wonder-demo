@@ -139,7 +139,7 @@ void main() {
 
   // Color influenced by u_const
   float t = smoothIt / float(maxIter);
-  float hue = mod(1.5 * u_const + u_time * 0.05, 1.0); // Use u_const to modify hue
+  float hue = mod(t * (1.5 + u_const) + u_time * 0.05, 1.0); // Use u_const to modify hue
   vec3 col = hsl2rgb(hue, 0.9, 0.5); // Vibrant colors
   col *= 1.0 - 0.3 * exp(-r * 1.0); // Softer fade with distance
   gl_FragColor = vec4(col, 1.0);
