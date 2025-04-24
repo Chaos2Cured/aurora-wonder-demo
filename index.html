@@ -28,7 +28,7 @@
   <label>Depth  <input id="depth"  type="range" min="20" max="120" value="80"></label>
   <label>Tunnel <input id="tunnel" type="range" min="0"  max="1"  step="0.01" value="0.30"></label>
   <label>Fog    <input id="fog"    type="range" min="0"  max="3"  step="0.05" value="1.2"></label>
-  <label>Zoom   <input id="zoom"   type="range" min="1"  max="10" step="0.1" value="9"></label>
+  <label>Zoom   <input id="zoom"   type="range" min="1"  max="15" step="0.1" value="9"></label>
   <button id="spinToggle">⏸ Rotate</button>
   <button id="resetView">⟳ Reset</button>
   <button id="toggleSound">🔇 Sound</button>
@@ -139,7 +139,9 @@ sel.zoom.oninput = ()=> zoomLevel = 11 - parseFloat(sel.zoom.value);   // invert
 sel.depth.oninput=sel.tunnel.oninput=sel.fog.oninput=()=>{};          // force repaint
 
 /* wheel zoom */
-cvs.addEventListener('wheel',e=>{e.preventDefault();const d=e.deltaY>0?1.1:0.9;zoomLevel/=d;zoomLevel=Math.max(0.1,Math.min(10,zoomLevel));sel.zoom.value=11-zoomLevel;});
+cvs.addEventListener('wheel',e=>{e.preventDefault();const d=e.deltaY>0?1.1:0.9;
+                                 zoomLevel/=d;
+                                 zoomLevel=Math.max(0.1,Math.min(15,zoomLevel));sel.zoom.value=11-zoomLevel;});
 
 /* drag pan */
 let drag=false, last=[0,0];
