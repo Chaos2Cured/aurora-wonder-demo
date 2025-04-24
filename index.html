@@ -63,6 +63,7 @@
     </label>
     <label>Depth <input id="depth" type="range" min="20" max="120" value="80"></label>
     <label>Tunnel <input id="tunnel" type="range" min="0" max="1" step="0.01" value="0.3"></label>
+    <label>Zoom <input id="zoom" type="range" min="0.1" max="10" step="0.1" value="2.5"></label>
     <button id="toggleSound">🔇 Sound</button>
   </div>
 
@@ -79,6 +80,8 @@ uniform float u_time;
 uniform float u_const;
 uniform float u_depth;
 uniform float u_tunnel;
+uniform float u_zoom;
+uniform vec2  u_center;
 
 // Hue helper (HSL → RGB)
 vec3 hsl2rgb(float h, float s, float l) {
@@ -106,10 +109,10 @@ vec3 hsl2rgb(float h, float s, float l) {
 }
 
 void main() {
-  // Normalized coords with zoom and offset for fractal detail
+  // Normalized coords with zoom and center offset
   vec2 uv = (gl_FragCoord.xy - 0.5 * u_res) / min(u_res.x, u_res.y);
-  uv *= 2.5; // Zoom into fractal boundary
-  uv += vec2(-0.5, 0.0); // Offset to interesting region
+  uv *= u_zoom; // Dynamic zoom
+  uv += u_center; // Center offset for interesting region
 
   // Tunnel warp
   float r = length(uv);
@@ -122,8 +125,9 @@ void main() {
   float it = 0.0;
   float smoothIt = 0.0;
   z = vec2(0.0, 0.0); // Start at origin for Mandelbrot
-  for (int i = 0; i < 200; i++) {
-    if (float(i) >= u_depth) break;
+  int maxIter = int(200.0 + (10.0 * log(1.0 / u_zoom))); // Increase iterations with zoom
+  for (int i = 0; i < 500; i++) { // Increase max iterations for detail
+    if (i >= maxIter) break;
     z = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;
     float r2 = dot(z, z);
     if (r2 > 4.0) {
@@ -133,10 +137,11 @@ void main() {
     it += 1.0;
   }
 
-  // Color
-  float t = smoothIt / u_depth;
-  vec3 col = hsl2rgb(mod(t + u_time * 0.05, 1.0), 0.9, 0.5); // Increase saturation for vibrancy
-  col *= 1.0 - 0.5 * exp(-r * 1.5); // Softer fade with distance
+  // Color influenced by u_const
+  float t = smoothIt / float(maxIter);
+  float hue = mod(t * u_const + u_time * 0.05, 1.0); // Use u_const to modify hue
+  vec3 col = hsl2rgb(hue, 0.9, 0.5); // Vibrant colors
+  col *= 1.0 - 0.3 * exp(-r * 1.0); // Softer fade with distance
   gl_FragColor = vec4(col, 1.0);
 }
 </script>
@@ -226,12 +231,48 @@ const u_time = gl.getUniformLocation(prog, 'u_time');
 const u_const = gl.getUniformLocation(prog, 'u_const');
 const u_depth = gl.getUniformLocation(prog, 'u_depth');
 const u_tunnel = gl.getUniformLocation(prog, 'u_tunnel');
-console.log('Uniform locations:', { u_res, u_time, u_const, u_depth, u_tunnel });
+const u_zoom = gl.getUniformLocation(prog, 'u_zoom');
+const u_center = gl.getUniformLocation(prog, 'u_center');
+console.log('Uniform locations:', { u_res, u_time, u_const, u_depth, u_tunnel, u_zoom, u_center });
 
 // UI elements
 const sel = document.getElementById('const');
 const dep = document.getElementById('depth');
 const tun = document.getElementById('tunnel');
+const zoomSlider = document.getElementById('zoom');
+
+// Zoom and center control
+let zoomLevel = parseFloat(zoomSlider.value);
+let center = [-0.5, 0.0]; // Initial center for interesting Mandelbrot region
+
+// Zoom with mouse wheel
+cvs.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const delta = e.deltaY > 0 ? 1.1 : 0.9; // Zoom out or in
+  zoomLevel *= delta;
+  zoomLevel = Math.max(0.1, Math.min(10.0, zoomLevel)); // Clamp zoom
+  zoomSlider.value = zoomLevel;
+});
+
+// Pan with mouse drag
+let isDragging = false;
+let lastMousePos = [0, 0];
+cvs.addEventListener('mousedown', (e) => {
+  isDragging = true;
+  lastMousePos = [e.clientX, e.clientY];
+});
+cvs.addEventListener('mousemove', (e) => {
+  if (isDragging) {
+    const dx = (e.clientX - lastMousePos[0]) / min(gl.drawingBufferWidth, gl.drawingBufferHeight) * zoomLevel;
+    const dy = (e.clientY - lastMousePos[1]) / min(gl.drawingBufferWidth, gl.drawingBufferHeight) * zoomLevel;
+    center[0] -= dx;
+    center[1] += dy;
+    lastMousePos = [e.clientX, e.clientY];
+  }
+});
+cvs.addEventListener('mouseup', () => {
+  isDragging = false;
+});
 
 // Rendering loop
 let start = performance.now();
@@ -243,13 +284,15 @@ function render() {
   const constValue = parseFloat(sel.value);
   const depthValue = parseFloat(dep.value);
   const tunnelValue = parseFloat(tun.value);
-  console.log(`Frame: t=${t.toFixed(2)}, u_res=${resValue}, u_const=${constValue}, u_depth=${depthValue}, u_tunnel=${tunnelValue}`);
+  console.log(`Frame: t=${t.toFixed(2)}, u_res=${resValue}, u_const=${constValue}, u_depth=${depthValue}, u_tunnel=${tunnelValue}, u_zoom=${zoomLevel}, u_center=${center}`);
 
   gl.uniform2f(u_res, resValue[0], resValue[1]);
   gl.uniform1f(u_time, t);
   gl.uniform1f(u_const, constValue);
   gl.uniform1f(u_depth, depthValue);
   gl.uniform1f(u_tunnel, tunnelValue);
+  gl.uniform1f(u_zoom, zoomLevel);
+  gl.uniform2f(u_center, center[0], center[1]);
 
   gl.clearColor(0.0, 0.0, 0.0, 1.0);
   gl.clear(gl.COLOR_BUFFER_BIT);
