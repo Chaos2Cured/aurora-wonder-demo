@@ -98,7 +98,7 @@ void main(){
 
   float jungle=fract(log(r+1.0)*3.0);        /* lush distance tint */
   vec3  col   = mix(hsl2rgb(jungle,0.7,0.4), hsl2rgb(hue,0.9,0.6), 0.6);
-  col        *= exp(-r*u_fog);               /* adjustable fog */
+  col        *= exp(-r * fogStrength) + ripple;               /* adjustable fog */
   gl_FragColor=vec4(col,1.0);
 }
 </script>
