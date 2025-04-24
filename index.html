@@ -152,7 +152,7 @@ let t0=performance.now();
 (function loop(){
   const t=(performance.now()-t0)/1000;
   gl.uniform2f(u_res,cvs.width,cvs.height);
-  gl.uniform1f(u_time,t); gl.uniform1f(u_const,parseFloat(sel.const.value));
+  gl.uniform1f(u_time,t); gl.uniform1f(u_const, parseFloat(sel['const'].value));  // safe access
   gl.uniform1f(u_depth,parseFloat(sel.depth.value)); gl.uniform1f(u_tunnel,parseFloat(sel.tunnel.value));
   gl.uniform1f(u_zoom,zoomLevel); gl.uniform1f(u_fog,parseFloat(sel.fog.value));
   gl.uniform2f(u_center,center[0],center[1]); gl.uniform1f(u_spin,spin);
